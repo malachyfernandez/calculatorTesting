@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tiny5&display=swap" rel="stylesheet">
+  <title>Cipher Decoder</title>
+  <style>
+
+    body {
+      background: rgb(129,123,75);
+      font-family: "Tiny5", sans-serif;
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    *, *:before, *:after {
+      box-sizing: inherit;
+    }
+
+    .photo {
+      width: 100%;
+      float: left;
+    }
+
+    .player {
+      /* photo code breaks with visibility: hidden;*/
+      width: 0;
+    }
+
+    .strip img {
+      width: 100px;
+    }
+
+    .hidden {
+      display: none;
+    }
+    button {
+      font-family: "Tiny5", sans-serif;
+      background:none;
+      border: 3px solid black;
+      font-size:20px;
+      padding:5px 10px;
+      color: black;
+      margin:5px;
+    }
+
+  </style>
+</head>
+<body>
+
+<div class="photobooth">
+  <div class="controls">
+    <button onClick="takePhoto()">Take Photo</button>
+  </div>
+
+  <canvas class="photo"></canvas>
+  <canvas class="hidden" class="originalPhoto"></canvas> <!-- Hidden canvas for unfiltered photo -->
+  <video class="player"></video>
+  <div class="strip"></div>
+</div>
+
+<script>
+  const video = document.querySelector('.player');
+  const canvas = document.querySelector('.photo');
+  const hiddenCanvas = document.querySelector('.hidden');
+  const ctx = canvas.getContext('2d');
+  const hiddenCtx = hiddenCanvas.getContext('2d');
+  const strip = document.querySelector('.strip');
+
+  video.setAttribute('autoplay', '');
+  video.setAttribute('muted', '');
+  video.setAttribute('playsinline', '');
+
+  const constraints = {
+    audio: false,
+    video: {
+      facingMode: 'environment'
+    }
+  };
+
+  const targetColor = { r: 129, g: 123, b: 75 }; // Set your target RGB color here
+
+  function getVideo() {
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then(localMediaStream => {
+        if ('srcObject' in video) {
+          video.srcObject = localMediaStream;
+        } else {
+          video.src = URL.createObjectURL(localMediaStream);
+        }
+        video.play();
+      })
+      .catch(err => {
+        console.error(`OH NO!!!!`, err);
+      });
+  }
+
+  function paintToCanvas() {
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    canvas.width = width;
+    canvas.height = height;
+    hiddenCanvas.width = width;
+    hiddenCanvas.height = height;
+
+    return setInterval(() => {
+      // Draw original image to hidden canvas (unfiltered)
+      hiddenCtx.drawImage(video, 0, 0, width, height);
+
+      // Draw video to visible canvas (with filter)
+      ctx.drawImage(video, 0, 0, width, height);
+      let imageData = ctx.getImageData(0, 0, width, height);
+      imageData = applyCustomFilter(imageData);
+      ctx.putImageData(imageData, 0, 0);
+    }, 16);
+  }
+
+  function applyCustomFilter(imageData) {
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      // Get the grayscale value
+      const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+
+      // Calculate the ratio of gray between 0 (black) and 255 (white)
+      const ratio = gray / 255;
+
+      // If it's white (or close to white), replace with the target color
+      if (gray > 240) {
+        data[i] = targetColor.r;
+        data[i + 1] = targetColor.g;
+        data[i + 2] = targetColor.b;
+      } else {
+        // For shades of gray, mix the target color with black based on the ratio
+        data[i] = targetColor.r * ratio;
+        data[i + 1] = targetColor.g * ratio;
+        data[i + 2] = targetColor.b * ratio;
+      }
+    }
+
+    return imageData;
+  }
+
+  function takePhoto() {
+    // Capture the unfiltered image from the hidden canvas
+    const data = hiddenCanvas.toDataURL('image/jpeg');
+    const link = document.createElement('a');
+    link.href = data;
+    link.setAttribute('download', 'photo');
+    link.innerHTML = `<img src="${data}" alt="Captured Photo" />`;
+    strip.insertBefore(link, strip.firstChild);
+  }
+
+  getVideo();
+
+  video.addEventListener('canplay', paintToCanvas);
+</script>
+
+</body>
+</html>
